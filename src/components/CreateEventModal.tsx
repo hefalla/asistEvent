@@ -11,10 +11,13 @@ import {
   Save, 
   Check, 
   AlertCircle,
-  Sparkles
+  Sparkles,
+  Image as ImageIcon,
+  Upload
 } from 'lucide-react';
 import { EventCategory, EventItem, StaffUser } from '../types';
-import { saveEvent } from '../lib/supabase';
+import { saveEvent, compressImageForUpload } from '../lib/supabase';
+import { EVENT_CATEGORY_COVERS, EVENT_IMAGE_PRESETS, getEventCoverImage } from '../lib/eventImages';
 
 interface CreateEventModalProps {
   isOpen: boolean;
@@ -39,6 +42,9 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState<EventCategory>(getDefaultCategory);
+  const [coverImage, setCoverImage] = useState<string>('');
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const [date, setDate] = useState('2026-11-10');
   const [time, setTime] = useState('09:30 AM');
   const [location, setLocation] = useState('Coliseo Principal');
@@ -49,12 +55,13 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
 
   useEffect(() => {
     if (isOpen) {
-      if (currentUser?.category_scope && currentUser.category_scope !== 'all') {
-        setCategory(currentUser.category_scope);
-      } else {
-        setCategory('deportes');
-      }
+      const defaultCat = currentUser?.category_scope && currentUser.category_scope !== 'all'
+        ? currentUser.category_scope
+        : 'deportes';
+      setCategory(defaultCat);
+      setCoverImage(EVENT_CATEGORY_COVERS[defaultCat] || EVENT_CATEGORY_COVERS.deportes);
       setRbacError(null);
+      setImageUploadError(null);
     }
   }, [isOpen, currentUser]);
 
@@ -63,6 +70,28 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
   const handleCategorySelect = (cat: EventCategory) => {
     setRbacError(null);
     setCategory(cat);
+    setCoverImage(EVENT_CATEGORY_COVERS[cat] || EVENT_CATEGORY_COVERS.deportes);
+  };
+
+  const handleCustomImageFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setImageUploadError('Por favor selecciona un archivo de imagen válido (JPG, PNG, WebP).');
+      return;
+    }
+
+    try {
+      setIsUploadingImage(true);
+      setImageUploadError(null);
+      const res = await compressImageForUpload(file, 800, 0.85);
+      setCoverImage(res.dataUrl);
+    } catch (err: any) {
+      setImageUploadError(err.message || 'Error al procesar la imagen.');
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -70,6 +99,8 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
     if (!title.trim()) return;
 
     setIsSubmitting(true);
+
+    const resolvedCover = coverImage || EVENT_CATEGORY_COVERS[category] || EVENT_CATEGORY_COVERS.deportes;
 
     const newEv = await saveEvent({
       title: title.trim(),
@@ -82,6 +113,7 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
       registered_count: 0,
       attended_count: 0,
       status: 'active',
+      cover_image: resolvedCover,
       qr_enabled: qrEnabled,
       created_by: currentUser.id
     });
@@ -193,6 +225,69 @@ export const CreateEventModal: React.FC<CreateEventModalProps> = ({
                 {rbacError}
               </span>
             )}
+          </div>
+
+          {/* Cover Image Selector & Live Preview */}
+          <div className="flex flex-col gap-2 p-3.5 bg-[#f0f7f2] dark:bg-[#13221a] rounded-2xl border border-[#d6eade] dark:border-[#1f3629]">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-emerald-950 dark:text-white flex items-center gap-1.5">
+                <ImageIcon className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <span>Imagen de Portada del Evento</span>
+              </label>
+              <label className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-white flex items-center gap-1 cursor-pointer bg-white dark:bg-[#182b21] px-2.5 py-1 rounded-lg border border-[#d6eade] dark:border-[#223d2e] shadow-xs">
+                <Upload className="w-3 h-3" />
+                <span>{isUploadingImage ? 'Procesando...' : 'Subir Imagen'}</span>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={handleCustomImageFile}
+                  disabled={isUploadingImage}
+                />
+              </label>
+            </div>
+
+            {imageUploadError && (
+              <span className="text-[11px] text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                {imageUploadError}
+              </span>
+            )}
+
+            <div className="flex items-center gap-3">
+              <div className="w-20 h-16 rounded-xl overflow-hidden shrink-0 border border-emerald-300 dark:border-emerald-600/50 shadow-sm relative bg-black/10">
+                <img
+                  src={getEventCoverImage(coverImage, category)}
+                  alt="Vista previa portada"
+                  className="w-full h-full object-cover"
+                />
+              </div>
+
+              <div className="flex-1 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                {EVENT_IMAGE_PRESETS.map((p) => {
+                  const isSelected = (coverImage || EVENT_CATEGORY_COVERS[category]) === p.url;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setCoverImage(p.url)}
+                      className={`relative rounded-lg overflow-hidden border p-1 text-left transition-all cursor-pointer ${
+                        isSelected
+                          ? 'border-emerald-600 ring-2 ring-emerald-500/30 bg-emerald-50 dark:bg-emerald-950/40'
+                          : 'border-[#d6eade] dark:border-[#223d2e] hover:border-emerald-400 bg-white dark:bg-[#15251c]'
+                      }`}
+                    >
+                      <div className="w-full h-7 rounded overflow-hidden mb-1">
+                        <img src={p.url} alt={p.label} className="w-full h-full object-cover" />
+                      </div>
+                      <span className="text-[10px] font-medium text-emerald-950 dark:text-emerald-100 block truncate">
+                        {p.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
           {/* Date & Time Row */}

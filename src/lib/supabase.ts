@@ -2,6 +2,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import emailjs from '@emailjs/browser';
 import { EventItem, AttendanceRecord, Participant, StaffUser } from '../types';
 import { INITIAL_EVENTS, INITIAL_ATTENDEES, INITIAL_STAFF_USERS } from './initialData';
+import { getEventCoverImage, EVENT_CATEGORY_COVERS } from './eventImages';
 
 // Storage keys for resilient offline and custom user credentials
 const STORAGE_KEY_CONFIG = 'asistevent_supabase_config';
@@ -107,7 +108,7 @@ function setLocalCache<T>(key: string, value: T): void {
 /**
  * Client-side image compressor: scales down and optimizes image to JPEG before upload
  */
-async function compressImageForUpload(file: File, maxDimension = 600, quality = 0.85): Promise<{ blob: Blob; dataUrl: string }> {
+export async function compressImageForUpload(file: File, maxDimension = 600, quality = 0.85): Promise<{ blob: Blob; dataUrl: string }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('No se pudo leer el archivo de imagen.'));
@@ -481,8 +482,15 @@ export async function fetchEvents(): Promise<EventItem[]> {
   const supabase = getSupabase();
   const cached = getLocalCache<EventItem[]>(STORAGE_KEY_EVENTS, INITIAL_EVENTS);
 
+  const normalizeList = (items: EventItem[]): EventItem[] => {
+    return items.map(e => ({
+      ...e,
+      cover_image: getEventCoverImage(e.cover_image, e.category)
+    }));
+  };
+
   if (!supabase) {
-    return cached;
+    return normalizeList(cached);
   }
 
   try {
@@ -492,31 +500,22 @@ export async function fetchEvents(): Promise<EventItem[]> {
       .order('date', { ascending: true });
 
     if (!error && data) {
-      setLocalCache(STORAGE_KEY_EVENTS, data as EventItem[]);
-      return data as EventItem[];
+      const normalized = normalizeList(data as EventItem[]);
+      setLocalCache(STORAGE_KEY_EVENTS, normalized);
+      return normalized;
     }
-    return cached;
+    return normalizeList(cached);
   } catch (err) {
     console.warn('Supabase fetchEvents fallback to cache:', err);
-    return cached;
+    return normalizeList(cached);
   }
 }
 
 function getCoverForCategory(category?: string): string {
-  switch (category) {
-    case 'deportes':
-      return '/src/assets/images/event_volleyball_court_1790266140041.jpg';
-    case 'musica':
-      return '/src/assets/images/event_folkloric_music_1790266151429.jpg';
-    case 'danzas':
-      return '/src/assets/images/event_folkloric_music_1790266151429.jpg';
-    case 'salud':
-      return '/src/assets/images/event_health_screening_1790266161602.jpg';
-    case 'psicologia':
-      return '/src/assets/images/event_mindfulness_workshop_1790266176598.jpg';
-    default:
-      return '/src/assets/images/event_volleyball_court_1790266140041.jpg';
+  if (category && category in EVENT_CATEGORY_COVERS) {
+    return EVENT_CATEGORY_COVERS[category as keyof typeof EVENT_CATEGORY_COVERS];
   }
+  return EVENT_CATEGORY_COVERS.deportes;
 }
 
 export async function saveEvent(event: Partial<EventItem>): Promise<EventItem> {
@@ -533,7 +532,7 @@ export async function saveEvent(event: Partial<EventItem>): Promise<EventItem> {
     registered_count: event.registered_count || 0,
     attended_count: event.attended_count || 0,
     status: event.status || 'active',
-    cover_image: event.cover_image || getCoverForCategory(event.category),
+    cover_image: getEventCoverImage(event.cover_image, event.category),
     qr_enabled: event.qr_enabled ?? true,
     created_by: event.created_by,
     created_at: event.created_at || new Date().toISOString()

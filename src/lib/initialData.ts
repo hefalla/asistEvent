@@ -1,4 +1,5 @@
 import { EventItem, AttendanceRecord, StaffUser } from '../types';
+import { EVENT_CATEGORY_COVERS } from './eventImages';
 
 export const INITIAL_STAFF_USERS: StaffUser[] = [
   {
@@ -122,7 +123,7 @@ export const INITIAL_EVENTS: EventItem[] = [
     registered_count: 48,
     attended_count: 38,
     status: 'active',
-    cover_image: '/src/assets/images/event_volleyball_court_1790266140041.jpg',
+    cover_image: EVENT_CATEGORY_COVERS.deportes,
     qr_enabled: true,
     created_by: 'staff-deportes',
     created_at: '2026-09-20T08:00:00Z'
@@ -140,7 +141,7 @@ export const INITIAL_EVENTS: EventItem[] = [
     registered_count: 180,
     attended_count: 145,
     status: 'active',
-    cover_image: '/src/assets/images/event_folkloric_music_1790266151429.jpg',
+    cover_image: EVENT_CATEGORY_COVERS.musica,
     qr_enabled: true,
     created_by: 'staff-musica',
     created_at: '2026-09-21T09:30:00Z'
@@ -158,7 +159,7 @@ export const INITIAL_EVENTS: EventItem[] = [
     registered_count: 110,
     attended_count: 89,
     status: 'active',
-    cover_image: '/src/assets/images/event_health_screening_1790266161602.jpg',
+    cover_image: EVENT_CATEGORY_COVERS.salud,
     qr_enabled: true,
     created_by: 'staff-salud',
     created_at: '2026-09-22T10:15:00Z'
@@ -176,7 +177,7 @@ export const INITIAL_EVENTS: EventItem[] = [
     registered_count: 28,
     attended_count: 22,
     status: 'active',
-    cover_image: '/src/assets/images/event_mindfulness_workshop_1790266176598.jpg',
+    cover_image: EVENT_CATEGORY_COVERS.psicologia,
     qr_enabled: true,
     created_by: 'staff-psico',
     created_at: '2026-09-23T11:00:00Z'
@@ -194,7 +195,7 @@ export const INITIAL_EVENTS: EventItem[] = [
     registered_count: 65,
     attended_count: 52,
     status: 'active',
-    cover_image: '/src/assets/images/event_folkloric_music_1790266151429.jpg',
+    cover_image: EVENT_CATEGORY_COVERS.danzas,
     qr_enabled: true,
     created_by: 'staff-danzas',
     created_at: '2026-09-23T14:00:00Z'

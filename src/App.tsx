@@ -16,6 +16,7 @@ import { EventQRModal } from './components/EventQRModal';
 import { EventCheckinView } from './components/EventCheckinView';
 import { StaffUser, EventItem, AttendanceRecord } from './types';
 import { INITIAL_STAFF_USERS, INITIAL_EVENTS } from './lib/initialData';
+import { EVENT_CATEGORY_COVERS } from './lib/eventImages';
 import { 
   fetchEvents, 
   fetchAttendees, 
@@ -111,7 +112,7 @@ function MainAppContent() {
     registered_count: 48,
     attended_count: 38,
     status: 'active' as const,
-    cover_image: '/src/assets/images/event_volleyball_court_1790266140041.jpg',
+    cover_image: EVENT_CATEGORY_COVERS.deportes,
     qr_enabled: true,
     created_at: new Date().toISOString()
   };

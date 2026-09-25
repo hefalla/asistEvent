@@ -26,6 +26,7 @@ import {
 import { EventItem, EventCategory, StaffUser } from '../types';
 import { hasFullEventAccess, getAccessibleEvents, canFinalizeOrDeleteEvent } from '../lib/permissions';
 import { INITIAL_STAFF_USERS } from '../lib/initialData';
+import { getEventCoverImage } from '../lib/eventImages';
 
 interface EventsViewProps {
   events: EventItem[];
@@ -396,12 +397,19 @@ export const EventsView: React.FC<EventsViewProps> = ({
 
                 {/* Event Title & Cover Art snippet */}
                 <div className="flex gap-4 items-start">
-                  <div className="w-20 h-20 rounded-2xl bg-[#f0f7f2] dark:bg-[#14231b] shrink-0 overflow-hidden relative border border-[#d6eade] dark:border-[#1f3629]">
+                  <div className="w-20 h-20 rounded-2xl bg-[#f0f7f2] dark:bg-[#14231b] shrink-0 overflow-hidden relative border border-[#d6eade] dark:border-[#1f3629] flex items-center justify-center">
                     <img 
-                      src={event.cover_image}
+                      src={getEventCoverImage(event.cover_image, event.category)}
                       alt={event.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       referrerPolicy="no-referrer"
+                      loading="lazy"
+                      onError={(e) => {
+                        const fallback = getEventCoverImage(undefined, event.category);
+                        if (e.currentTarget.src !== fallback) {
+                          e.currentTarget.src = fallback;
+                        }
+                      }}
                     />
                   </div>
                   <div className="flex flex-col min-w-0">
