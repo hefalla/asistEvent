@@ -1,0 +1,6 @@
+{
+  "name": "AsistEvent - Bienestar Institucional y Control de Acceso",
+  "description": "Plataforma de bienestar institucional, control de acceso rápido con PIN de 4 dígitos, gestión de eventos y analítica de asistencia conectada a Supabase con estilo dark mode minimalista.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

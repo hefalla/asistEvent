@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+/* Configure custom variant for class-based dark mode in Tailwind CSS v4 */
+@custom-variant dark (&:where(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *));
+
+@layer base {
+  :root {
+    --font-display: 'Plus Jakarta Sans', 'Inter', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  body {
+    font-family: var(--font-body);
+    overflow-x: hidden;
+  }
+
+  /* Tabular numbers for all metrics */
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Custom sleek scrollbars adapting to light / dark */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(34, 197, 94, 0.25);
+  border-radius: 9999px;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(34, 197, 94, 0.45);
+}
+
+:not(.dark) ::-webkit-scrollbar-thumb {
+  background: rgba(22, 101, 52, 0.25);
+  border-radius: 9999px;
+}
+
+:not(.dark) ::-webkit-scrollbar-thumb:hover {
+  background: rgba(22, 101, 52, 0.45);
+}
+
+/* Pulse radar and scan animation */
+@keyframes scanline {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(1000%);
+  }
+}
+
+.animate-scanline {
+  animation: scanline 2.2s linear infinite;
+}
