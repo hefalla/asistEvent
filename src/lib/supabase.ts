@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import emailjs from '@emailjs/browser';
 import { EventItem, AttendanceRecord, Participant, StaffUser } from '../types';
 import { INITIAL_EVENTS, INITIAL_ATTENDEES, INITIAL_STAFF_USERS } from './initialData';
 
@@ -8,6 +9,13 @@ const STORAGE_KEY_EVENTS = 'asistevent_events_cache';
 const STORAGE_KEY_ATTENDEES = 'asistevent_attendees_cache';
 const STORAGE_KEY_PARTICIPANTS = 'asistevent_participants_cache';
 const STORAGE_KEY_STAFF = 'asistevent_staff_cache';
+const STORAGE_KEY_EMAILJS = 'asistevent_emailjs_config';
+
+export interface EmailJSConfig {
+  serviceId: string;
+  templateId: string;
+  publicKey: string;
+}
 
 export interface SupabaseConfig {
   url: string;
@@ -958,7 +966,47 @@ export async function recoverParticipantPin(identifier: string): Promise<PinReco
 
   const masked = maskEmail(participant.email);
 
-  // Call real email dispatch endpoint
+  // 1. Try sending via EmailJS (Works 100% in browser on GitHub Pages and static hosting)
+  const emailJsCfg = getEmailJSConfig();
+  if (emailJsCfg.serviceId && emailJsCfg.templateId && emailJsCfg.publicKey) {
+    try {
+      await emailjs.send(
+        emailJsCfg.serviceId,
+        emailJsCfg.templateId,
+        {
+          to_email: participant.email,
+          to_name: participant.name,
+          doc_number: participant.doc_number,
+          pin: participant.pin,
+          time: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
+        },
+        emailJsCfg.publicKey
+      );
+
+      return {
+        success: true,
+        message: `¡Correo despachado con éxito vía EmailJS! Se ha enviado el PIN a ${masked}. Revisa tu bandeja de entrada o spam.`,
+        name: participant.name,
+        email: participant.email,
+        maskedEmail: masked,
+        pin: participant.pin,
+        doc_number: participant.doc_number
+      };
+    } catch (err: any) {
+      console.error('EmailJS send error:', err);
+      return {
+        success: false,
+        message: `Error en EmailJS: ${err?.text || err?.message || 'Verifica tu Service ID, Template ID y Public Key.'}`,
+        name: participant.name,
+        email: participant.email,
+        maskedEmail: masked,
+        pin: participant.pin,
+        doc_number: participant.doc_number
+      };
+    }
+  }
+
+  // 2. Try sending via local backend /api/send-email (Runs on Node.js / localhost)
   let dispatchResult: { success: boolean; configured?: boolean; error?: string } = { success: true };
   try {
     const res = await fetch('/api/send-email', {
@@ -971,12 +1019,23 @@ export async function recoverParticipantPin(identifier: string): Promise<PinReco
         pin: participant.pin
       })
     });
-    dispatchResult = await res.json();
-  } catch (err: any) {
-    console.warn('Could not contact /api/send-email:', err);
+    if (res.ok) {
+      dispatchResult = await res.json();
+    } else {
+      return {
+        success: false,
+        message: 'Para enviar correos en GitHub Pages, configura tu cuenta gratuita de EmailJS. Haz clic en "Configurar EmailJS" arriba.',
+        name: participant.name,
+        email: participant.email,
+        maskedEmail: masked,
+        pin: participant.pin,
+        doc_number: participant.doc_number
+      };
+    }
+  } catch {
     return {
       success: false,
-      message: 'No se pudo comunicar con el servicio local de correo electrónico.',
+      message: 'Para enviar correos en GitHub Pages, configura tu cuenta gratuita de EmailJS. Haz clic en "Configurar EmailJS" arriba.',
       name: participant.name,
       email: participant.email,
       maskedEmail: masked,
@@ -985,11 +1044,11 @@ export async function recoverParticipantPin(identifier: string): Promise<PinReco
     };
   }
 
-  // If not configured, explain clearly
+  // If local Node is not configured
   if (!dispatchResult.success && dispatchResult.configured === false) {
     return {
       success: false,
-      message: dispatchResult.error || 'Configura tu cuenta de Gmail y Contraseña de Aplicación en .env para despachar correos reales.',
+      message: dispatchResult.error || 'Configura EmailJS o tus credenciales en .env para despachar correos reales.',
       name: participant.name,
       email: participant.email,
       maskedEmail: masked,
@@ -1021,13 +1080,52 @@ export async function recoverParticipantPin(identifier: string): Promise<PinReco
   };
 }
 
-export async function checkEmailServiceStatus(): Promise<{ configured: boolean; user: string | null }> {
+export function getEmailJSConfig(): EmailJSConfig {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY_EMAILJS);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.serviceId && parsed.templateId && parsed.publicKey) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Error reading EmailJS config from localStorage:', e);
+  }
+
+  return {
+    serviceId: import.meta.env.VITE_EMAILJS_SERVICE_ID || '',
+    templateId: import.meta.env.VITE_EMAILJS_TEMPLATE_ID || '',
+    publicKey: import.meta.env.VITE_EMAILJS_PUBLIC_KEY || ''
+  };
+}
+
+export function saveEmailJSConfig(config: EmailJSConfig): void {
+  localStorage.setItem(STORAGE_KEY_EMAILJS, JSON.stringify(config));
+}
+
+export function isEmailJSConfigured(): boolean {
+  const cfg = getEmailJSConfig();
+  return Boolean(cfg.serviceId && cfg.templateId && cfg.publicKey);
+}
+
+export async function checkEmailServiceStatus(): Promise<{ configured: boolean; user: string | null; provider: 'emailjs' | 'smtp' | null }> {
+  const emailJsCfg = getEmailJSConfig();
+  if (emailJsCfg.serviceId && emailJsCfg.templateId && emailJsCfg.publicKey) {
+    return { configured: true, user: emailJsCfg.serviceId, provider: 'emailjs' };
+  }
+
   try {
     const res = await fetch('/api/email-status');
-    return await res.json();
+    if (res.ok) {
+      const data = await res.json();
+      return { ...data, provider: 'smtp' };
+    }
   } catch {
-    return { configured: false, user: null };
+    // static host without backend
   }
+
+  return { configured: false, user: null, provider: null };
 }
 
 export async function saveSmtpCredentials(smtpUser: string, smtpPass: string): Promise<{ success: boolean; message?: string; error?: string }> {

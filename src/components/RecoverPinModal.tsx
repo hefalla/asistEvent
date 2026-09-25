@@ -6,20 +6,24 @@ import {
   AlertCircle, 
   ShieldCheck, 
   KeyRound, 
-  CreditCard,
-  Sparkles,
-  ExternalLink,
-  Settings,
-  Lock,
-  ChevronDown,
-  ChevronUp,
-  Save
+  CreditCard, 
+  Sparkles, 
+  ExternalLink, 
+  Settings, 
+  ChevronDown, 
+  ChevronUp, 
+  Save,
+  Globe,
+  Server
 } from 'lucide-react';
 import { 
   recoverParticipantPin, 
   PinRecoveryResult, 
   checkEmailServiceStatus, 
-  saveSmtpCredentials 
+  saveSmtpCredentials,
+  getEmailJSConfig,
+  saveEmailJSConfig,
+  isEmailJSConfigured
 } from '../lib/supabase';
 
 interface RecoverPinModalProps {
@@ -41,16 +45,34 @@ export const RecoverPinModal: React.FC<RecoverPinModalProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   // Email service status & configuration state
-  const [smtpStatus, setSmtpStatus] = useState<{ configured: boolean; user: string | null }>({ configured: false, user: null });
+  const [emailStatus, setEmailStatus] = useState<{ configured: boolean; user: string | null; provider: 'emailjs' | 'smtp' | null }>({
+    configured: false,
+    user: null,
+    provider: null
+  });
   const [showConfigDrawer, setShowConfigDrawer] = useState(false);
+  const [configTab, setConfigTab] = useState<'emailjs' | 'smtp'>('emailjs');
+
+  // EmailJS fields
+  const [ejsServiceId, setEjsServiceId] = useState('');
+  const [ejsTemplateId, setEjsTemplateId] = useState('');
+  const [ejsPublicKey, setEjsPublicKey] = useState('');
+
+  // SMTP fields
   const [cfgGmail, setCfgGmail] = useState('');
   const [cfgAppPass, setCfgAppPass] = useState('');
+
   const [isSavingConfig, setIsSavingConfig] = useState(false);
   const [configFeedback, setConfigFeedback] = useState<{ success: boolean; message: string } | null>(null);
 
   const fetchStatus = async () => {
     const status = await checkEmailServiceStatus();
-    setSmtpStatus(status);
+    setEmailStatus(status);
+
+    const ejs = getEmailJSConfig();
+    setEjsServiceId(ejs.serviceId);
+    setEjsTemplateId(ejs.templateId);
+    setEjsPublicKey(ejs.publicKey);
   };
 
   useEffect(() => {
@@ -79,14 +101,44 @@ export const RecoverPinModal: React.FC<RecoverPinModalProps> = ({
         setResult(res);
       } else {
         setError(res.message);
-        if (res.message.includes('Configura tu cuenta') || res.message.includes('No se han configurado')) {
+        if (res.message.includes('EmailJS') || res.message.includes('GitHub Pages') || res.message.includes('Configura')) {
           setShowConfigDrawer(true);
+          setConfigTab('emailjs');
         }
       }
     } catch (err: any) {
       setError(err?.message || 'Error al intentar procesar la solicitud de recordatorio.');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleSaveEmailJS = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ejsServiceId.trim() || !ejsTemplateId.trim() || !ejsPublicKey.trim()) return;
+
+    setIsSavingConfig(true);
+    try {
+      saveEmailJSConfig({
+        serviceId: ejsServiceId.trim(),
+        templateId: ejsTemplateId.trim(),
+        publicKey: ejsPublicKey.trim()
+      });
+
+      setConfigFeedback({
+        success: true,
+        message: '¡Configuración de EmailJS guardada! Ya puedes enviar correos reales en GitHub Pages.'
+      });
+      fetchStatus();
+      setError(null);
+      setTimeout(() => setShowConfigDrawer(false), 2000);
+    } catch (err: any) {
+      setConfigFeedback({
+        success: false,
+        message: err.message || 'Error al guardar la configuración de EmailJS.'
+      });
+    } finally {
+      setIsSavingConfig(false);
     }
   };
 
@@ -102,7 +154,7 @@ export const RecoverPinModal: React.FC<RecoverPinModalProps> = ({
       if (res.success) {
         setConfigFeedback({
           success: true,
-          message: '¡Credenciales de Gmail guardadas! Los correos reales ya pueden enviarse.'
+          message: '¡Credenciales de Gmail guardadas! Activas para servidores Node.js locales.'
         });
         await fetchStatus();
         setError(null);
@@ -121,10 +173,6 @@ export const RecoverPinModal: React.FC<RecoverPinModalProps> = ({
     } finally {
       setIsSavingConfig(false);
     }
-  };
-
-  const handleFinishAndEnterPin = () => {
-    onClose();
   };
 
   return (
@@ -165,14 +213,16 @@ export const RecoverPinModal: React.FC<RecoverPinModalProps> = ({
         {/* Content Body */}
         <div className="p-5 sm:p-6 space-y-4">
           
-          {/* SMTP Real Sending Status Indicator */}
+          {/* Email Service Status Indicator */}
           <div className="flex items-center justify-between p-2.5 rounded-2xl bg-[#f0f7f2] dark:bg-[#13221a] border border-[#d6eade] dark:border-[#1f3629] text-xs">
             <div className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full ${smtpStatus.configured ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+              <span className={`w-2.5 h-2.5 rounded-full ${emailStatus.configured ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
               <span className="font-semibold text-emerald-950 dark:text-white">
-                {smtpStatus.configured 
-                  ? `Servicio Gmail Activo (${smtpStatus.user})` 
-                  : 'Servidor Gmail no configurado'}
+                {emailStatus.configured 
+                  ? emailStatus.provider === 'emailjs'
+                    ? `EmailJS Conectado (${emailStatus.user})`
+                    : `Gmail SMTP Activo (${emailStatus.user})`
+                  : 'EmailJS no configurado (Requerido para GitHub Pages)'}
               </span>
             </div>
 
@@ -182,20 +232,42 @@ export const RecoverPinModal: React.FC<RecoverPinModalProps> = ({
               className="text-[11px] font-bold text-emerald-700 dark:text-emerald-400 hover:text-emerald-900 dark:hover:text-emerald-200 underline flex items-center gap-1 cursor-pointer"
             >
               <Settings className="w-3 h-3" />
-              <span>{showConfigDrawer ? 'Ocultar Ajustes' : 'Configurar Gmail'}</span>
+              <span>{showConfigDrawer ? 'Ocultar' : 'Configurar'}</span>
               {showConfigDrawer ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
             </button>
           </div>
 
-          {/* Collapsible Gmail SMTP Setup Form */}
+          {/* Collapsible Configuration Drawer */}
           {showConfigDrawer && (
-            <div className="p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 space-y-3 animate-in fade-in duration-150">
-              <div className="flex items-start gap-2">
-                <Settings className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0 mt-0.5" />
-                <div className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
-                  <strong className="block font-semibold">Configuración de Envío Real con Gmail:</strong>
-                  <span>Ingresa tu cuenta de Gmail y una <strong>Contraseña de Aplicación de 16 caracteres</strong> generada en tu cuenta de Google.</span>
-                </div>
+            <div className="p-4 rounded-2xl bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 space-y-3 animate-in fade-in duration-150">
+              
+              {/* Tabs: EmailJS (GitHub Pages) vs Gmail SMTP (Local) */}
+              <div className="flex items-center gap-2 p-1 bg-white/70 dark:bg-[#111e17] rounded-xl border border-amber-200/80 dark:border-amber-900/60 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setConfigTab('emailjs')}
+                  className={`flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    configTab === 'emailjs'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-emerald-900 dark:text-emerald-200 hover:bg-emerald-50 dark:hover:bg-[#16271e]'
+                  }`}
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  <span>EmailJS (GitHub Pages)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setConfigTab('smtp')}
+                  className={`flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    configTab === 'smtp'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-emerald-900 dark:text-emerald-200 hover:bg-emerald-50 dark:hover:bg-[#16271e]'
+                  }`}
+                >
+                  <Server className="w-3.5 h-3.5" />
+                  <span>Gmail SMTP (Local)</span>
+                </button>
               </div>
 
               {configFeedback && (
@@ -204,60 +276,125 @@ export const RecoverPinModal: React.FC<RecoverPinModalProps> = ({
                     ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-900/40 dark:text-emerald-200' 
                     : 'bg-rose-100 text-rose-900 dark:bg-rose-950 dark:text-rose-200'
                 }`}>
-                  {configFeedback.success ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertCircle className="w-4 h-4 text-rose-600" />}
+                  {configFeedback.success ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />}
                   <span>{configFeedback.message}</span>
                 </div>
               )}
 
-              <form onSubmit={handleSaveSmtp} className="space-y-2.5">
-                <div>
-                  <label className="text-[11px] font-semibold text-amber-950 dark:text-amber-200 block mb-1">
-                    Tu Correo Gmail:
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={cfgGmail}
-                    onChange={(e) => setCfgGmail(e.target.value)}
-                    placeholder="ejemplo@gmail.com"
-                    className="w-full h-9 px-3 rounded-xl bg-white dark:bg-[#101b15] text-xs text-emerald-950 dark:text-white border border-amber-300 dark:border-amber-800 focus:outline-none focus:border-emerald-500 font-mono"
-                  />
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[11px] font-semibold text-amber-950 dark:text-amber-200">
-                      Contraseña de Aplicación (16 letras):
-                    </label>
+              {/* TAB 1: EMAILJS (FOR GITHUB PAGES) */}
+              {configTab === 'emailjs' ? (
+                <form onSubmit={handleSaveEmailJS} className="space-y-2.5">
+                  <div className="flex items-start justify-between gap-2 text-[11px] text-amber-900/90 dark:text-amber-200/90">
+                    <span>
+                      EmailJS permite enviar correos en <strong>GitHub Pages</strong> conectando tu Gmail sin necesidad de servidor.
+                    </span>
                     <a
-                      href="https://myaccount.google.com/apppasswords"
+                      href="https://dashboard.emailjs.com/sign-up"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[10px] text-emerald-700 dark:text-emerald-400 hover:underline flex items-center gap-0.5"
+                      className="text-emerald-700 dark:text-emerald-400 font-bold hover:underline shrink-0 flex items-center gap-1"
                     >
-                      <span>Generar en Google</span>
+                      <span>Crear cuenta gratis</span>
                       <ExternalLink className="w-2.5 h-2.5" />
                     </a>
                   </div>
-                  <input
-                    type="password"
-                    required
-                    value={cfgAppPass}
-                    onChange={(e) => setCfgAppPass(e.target.value)}
-                    placeholder="abcd efgh ijkl mnop"
-                    className="w-full h-9 px-3 rounded-xl bg-white dark:bg-[#101b15] text-xs text-emerald-950 dark:text-white border border-amber-300 dark:border-amber-800 focus:outline-none focus:border-emerald-500 font-mono tracking-wider"
-                  />
-                </div>
 
-                <button
-                  type="submit"
-                  disabled={isSavingConfig || !cfgGmail.trim() || !cfgAppPass.trim()}
-                  className="w-full h-9 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  <span>{isSavingConfig ? 'Guardando en .env...' : 'Guardar y Activar Envío Real'}</span>
-                </button>
-              </form>
+                  <div>
+                    <label className="text-[11px] font-semibold text-amber-950 dark:text-amber-200 block mb-0.5">
+                      Service ID (ej. service_gmail):
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={ejsServiceId}
+                      onChange={(e) => setEjsServiceId(e.target.value)}
+                      placeholder="service_xxxxxxx"
+                      className="w-full h-8 px-2.5 rounded-xl bg-white dark:bg-[#101b15] text-xs text-emerald-950 dark:text-white border border-amber-300 dark:border-amber-800 focus:outline-none focus:border-emerald-500 font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-amber-950 dark:text-amber-200 block mb-0.5">
+                      Template ID (ej. template_asistevent):
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={ejsTemplateId}
+                      onChange={(e) => setEjsTemplateId(e.target.value)}
+                      placeholder="template_xxxxxxx"
+                      className="w-full h-8 px-2.5 rounded-xl bg-white dark:bg-[#101b15] text-xs text-emerald-950 dark:text-white border border-amber-300 dark:border-amber-800 focus:outline-none focus:border-emerald-500 font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-amber-950 dark:text-amber-200 block mb-0.5">
+                      Public Key (Account &gt; Public Key):
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={ejsPublicKey}
+                      onChange={(e) => setEjsPublicKey(e.target.value)}
+                      placeholder="pk_xxxxxxx o clave pública"
+                      className="w-full h-8 px-2.5 rounded-xl bg-white dark:bg-[#101b15] text-xs text-emerald-950 dark:text-white border border-amber-300 dark:border-amber-800 focus:outline-none focus:border-emerald-500 font-mono"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSavingConfig || !ejsServiceId.trim() || !ejsTemplateId.trim() || !ejsPublicKey.trim()}
+                    className="w-full h-9 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Guardar y Activar EmailJS</span>
+                  </button>
+                </form>
+              ) : (
+                /* TAB 2: LOCAL GMAIL SMTP */
+                <form onSubmit={handleSaveSmtp} className="space-y-2.5">
+                  <p className="text-[11px] text-amber-900/90 dark:text-amber-200/90">
+                    Solo funciona en entorno de desarrollo local con Node.js (<code className="font-mono">npm run dev</code>).
+                  </p>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-amber-950 dark:text-amber-200 block mb-0.5">
+                      Tu Correo Gmail:
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={cfgGmail}
+                      onChange={(e) => setCfgGmail(e.target.value)}
+                      placeholder="edthf2015@gmail.com"
+                      className="w-full h-8 px-2.5 rounded-xl bg-white dark:bg-[#101b15] text-xs text-emerald-950 dark:text-white border border-amber-300 dark:border-amber-800 focus:outline-none focus:border-emerald-500 font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-amber-950 dark:text-amber-200 block mb-0.5">
+                      Contraseña de Aplicación (16 letras):
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      value={cfgAppPass}
+                      onChange={(e) => setCfgAppPass(e.target.value)}
+                      placeholder="mkwd eeqo ksqb uyro"
+                      className="w-full h-8 px-2.5 rounded-xl bg-white dark:bg-[#101b15] text-xs text-emerald-950 dark:text-white border border-amber-300 dark:border-amber-800 focus:outline-none focus:border-emerald-500 font-mono"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isSavingConfig || !cfgGmail.trim() || !cfgAppPass.trim()}
+                    className="w-full h-9 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Guardar en .env local</span>
+                  </button>
+                </form>
+              )}
             </div>
           )}
 
@@ -410,7 +547,7 @@ export const RecoverPinModal: React.FC<RecoverPinModalProps> = ({
 
                 <button
                   type="button"
-                  onClick={handleFinishAndEnterPin}
+                  onClick={onClose}
                   className="w-full sm:w-auto px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <KeyRound className="w-3.5 h-3.5" />
