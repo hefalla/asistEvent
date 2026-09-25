@@ -975,8 +975,13 @@ export async function recoverParticipantPin(identifier: string): Promise<PinReco
         emailJsCfg.templateId,
         {
           to_email: participant.email,
+          email: participant.email,
+          user_email: participant.email,
           to_name: participant.name,
+          name: participant.name,
+          user_name: participant.name,
           doc_number: participant.doc_number,
+          docNumber: participant.doc_number,
           pin: participant.pin,
           time: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
         },
@@ -1080,6 +1085,10 @@ export async function recoverParticipantPin(identifier: string): Promise<PinReco
   };
 }
 
+const DEFAULT_EMAILJS_SERVICE_ID = 'service_0nk8bmq';
+const DEFAULT_EMAILJS_TEMPLATE_ID = 'template_f6064rd';
+const DEFAULT_EMAILJS_PUBLIC_KEY = 'RGrA7S9feEdXwjdEF';
+
 export function getEmailJSConfig(): EmailJSConfig {
   try {
     const saved = localStorage.getItem(STORAGE_KEY_EMAILJS);
@@ -1094,9 +1103,9 @@ export function getEmailJSConfig(): EmailJSConfig {
   }
 
   return {
-    serviceId: import.meta.env.VITE_EMAILJS_SERVICE_ID || '',
-    templateId: import.meta.env.VITE_EMAILJS_TEMPLATE_ID || '',
-    publicKey: import.meta.env.VITE_EMAILJS_PUBLIC_KEY || ''
+    serviceId: import.meta.env.VITE_EMAILJS_SERVICE_ID || DEFAULT_EMAILJS_SERVICE_ID,
+    templateId: import.meta.env.VITE_EMAILJS_TEMPLATE_ID || DEFAULT_EMAILJS_TEMPLATE_ID,
+    publicKey: import.meta.env.VITE_EMAILJS_PUBLIC_KEY || DEFAULT_EMAILJS_PUBLIC_KEY
   };
 }
 
