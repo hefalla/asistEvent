@@ -196,6 +196,7 @@ function emailPlugin(): Plugin {
 
 export default defineConfig(() => {
   return {
+    base: './',
     plugins: [react(), tailwindcss(), emailPlugin()],
     resolve: {
       alias: {
